@@ -10,5 +10,3 @@ target/*
 dependency-reduced-pom.xml
 .project
 .classpath
-# Example Jar File For Run Program.
-!target/kafka-flink-v1.jar
