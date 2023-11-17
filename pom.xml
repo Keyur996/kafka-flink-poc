@@ -7,7 +7,8 @@
 
     <properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <flink.version>1.17.0</flink.version>
+        <flink.version>1.18.0</flink.version>
+        <flink.connector.kafka>3.0.1-1.18</flink.connector.kafka>
     </properties>
     
     <dependencies>
@@ -26,7 +27,7 @@
 		<dependency>
 		    <groupId>org.apache.flink</groupId>
 		    <artifactId>flink-connector-kafka</artifactId>
-		    <version>${flink.version}</version>
+		    <version>${flink.connector.kafka}</version>
 		</dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
