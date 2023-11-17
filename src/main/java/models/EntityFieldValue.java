@@ -1,7 +1,6 @@
 package models;
 
 import java.util.Date;
-import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -13,7 +12,7 @@ public class EntityFieldValue {
 	public int entity_field_id;
 	public int record_id;
 	public String value;
-	public Map<String, String> value_json;
+	public Object value_json;
 	public int created_by;
 	public int updated_by;
 	public int deleted_by;
@@ -25,7 +24,7 @@ public class EntityFieldValue {
 	public EntityFieldValue(@JsonProperty("id") int id, @JsonProperty("organization_id") int organization_id,
 			@JsonProperty("branch_id") int branch_id, @JsonProperty("entity_field_id") int entity_field_id,
 			@JsonProperty("record_id") int record_id, @JsonProperty("value") String value,
-			@JsonProperty("value_json") Map<String, String> value_json, @JsonProperty("created_by") int created_by,
+			@JsonProperty("value_json") Object value_json, @JsonProperty("created_by") int created_by,
 			@JsonProperty("updated_by") int updated_by, @JsonProperty("deleted_by") int deleted_by,
 			@JsonProperty("created_at") Date created_at, @JsonProperty("updated_at") Date updated_at,
 			@JsonProperty("deleted_at") Date deleted_at) {
@@ -97,11 +96,11 @@ public class EntityFieldValue {
 		this.value = value;
 	}
 
-	public Map<String, String> getValue_json() {
+	public Object getValue_json() {
 		return value_json;
 	}
 
-	public void setValue_json(Map<String, String> value_json) {
+	public void setValue_json(Object value_json) {
 		this.value_json = value_json;
 	}
 

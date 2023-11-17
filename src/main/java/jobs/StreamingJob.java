@@ -26,9 +26,15 @@ import operator.GroupByRecordIdAndOrganizationIdProcessFunction;
 import schema.KafkaMessageSchema;
 import schema.KafkaMessageSinkSchema;
 
+@SuppressWarnings({"unused"})
 public class StreamingJob {
 	private SourceFunction<Long> source;
 	private SinkFunction<Long> sink;
+	
+	private final String kafkaServers = "kafka:9092";
+	private final String inputTopicName = "ipoint.public.entity_field_value";
+	private final String consumerGroupId = "entity_group";
+	private final String outputTopicName = "windowing_output";
 
 	public StreamingJob(SourceFunction<Long> source, SinkFunction<Long> sink) {
 		this.source = source;
@@ -42,9 +48,10 @@ public class StreamingJob {
 		Configuration conf = new Configuration();
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
 
-		KafkaSource<KafkaMessage> kafkaSource = KafkaSource.<KafkaMessage>builder().setBootstrapServers("kafka:9092")
-				.setTopics("ipoint.public.entity_field_value").setGroupId("entity_group")
-				.setStartingOffsets(OffsetsInitializer.latest()).setValueOnlyDeserializer(new KafkaMessageSchema())
+		KafkaSource<KafkaMessage> kafkaSource = KafkaSource.<KafkaMessage>builder().setBootstrapServers(kafkaServers)
+				.setTopics(inputTopicName).setGroupId(consumerGroupId)
+				.setStartingOffsets(OffsetsInitializer.latest())
+				.setValueOnlyDeserializer(new KafkaMessageSchema())
 				.build();
 
 		DataStream<KafkaMessage> stream = env
@@ -75,8 +82,8 @@ public class StreamingJob {
 				.<KafkaMessage>forBoundedOutOfOrderness(Duration.ofMillis(100)).withTimestampAssigner(sz)
 				.withIdleness(Duration.ofSeconds(10));
 
-		DataStream<KafkaMessage> watermarkDataStream = stream.assignTimestampsAndWatermarks(watermarkStrategy);
-		DataStream<GroupedData> groupedData = watermarkDataStream
+//		DataStream<KafkaMessage> watermarkDataStream = stream.assignTimestampsAndWatermarks(watermarkStrategy);
+		DataStream<GroupedData> groupedData = stream.assignTimestampsAndWatermarks(watermarkStrategy)
 				.keyBy((KeySelector<KafkaMessage, String>) kafkaMessage -> {
 					Integer recordId = kafkaMessage.after != null ? Integer.valueOf(kafkaMessage.after.record_id)
 							: kafkaMessage.before != null ? Integer.valueOf(kafkaMessage.before.record_id) : null;
@@ -88,8 +95,8 @@ public class StreamingJob {
 				}).window(TumblingProcessingTimeWindows.of(Time.seconds(1)))
 				.apply(new GroupByRecordIdAndOrganizationIdProcessFunction());
 
-		KafkaSink<GroupedData> sink = KafkaSink.<GroupedData>builder().setBootstrapServers("kafka:9092")
-				.setRecordSerializer(new KafkaMessageSinkSchema("windowing_output"))
+		KafkaSink<GroupedData> sink = KafkaSink.<GroupedData>builder().setBootstrapServers(kafkaServers)
+				.setRecordSerializer(new KafkaMessageSinkSchema(outputTopicName))
 				.setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE).build();
 
 		groupedData.sinkTo(sink);
