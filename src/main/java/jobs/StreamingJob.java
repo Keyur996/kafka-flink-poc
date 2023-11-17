@@ -133,7 +133,7 @@ public class StreamingJob {
 							: kafkaMessage.before != null ? Integer.valueOf(kafkaMessage.before.organization_id) : null;
 					return recordId == null || organizationId == null ? "defaultKey"
 							: recordId.toString() + "_" + organizationId.toString();
-				}).window(TumblingProcessingTimeWindows.of(Time.seconds(1)))
+				}).window(TumblingProcessingTimeWindows.of(Time.seconds(2)))
 				.apply(new GroupByRecordIdAndOrganizationIdProcessFunction());
 
 		KafkaSink<GroupedData> sink = getOutputSink(kafkaServers, outputTopicNames);
