@@ -1,4 +1,6 @@
-
+# Configuration File 
+src/main/resources/*
+!src/main/resources/application.properties.exmaple
 # Build Files.
 target/*
 # Eclipse Configuration Files.
