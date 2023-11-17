@@ -4,6 +4,7 @@ import java.util.Date;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 
 public class EntityFieldValue {
 	public int id;
@@ -12,7 +13,10 @@ public class EntityFieldValue {
 	public int entity_field_id;
 	public int record_id;
 	public String value;
+
+	@JsonRawValue
 	public Object value_json;
+
 	public int created_by;
 	public int updated_by;
 	public int deleted_by;

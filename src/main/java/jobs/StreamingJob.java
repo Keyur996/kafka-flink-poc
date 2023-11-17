@@ -1,12 +1,20 @@
 package jobs;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.Properties;
+import java.util.Set;
 
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
@@ -15,8 +23,7 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.SinkFunction;
-import org.apache.flink.streaming.api.functions.source.SourceFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 
@@ -26,36 +33,71 @@ import operator.GroupByRecordIdAndOrganizationIdProcessFunction;
 import schema.KafkaMessageSchema;
 import schema.KafkaMessageSinkSchema;
 
-@SuppressWarnings({"unused"})
+@SuppressWarnings({ "unused" })
 public class StreamingJob {
-	private SourceFunction<Long> source;
-	private SinkFunction<Long> sink;
-	
-	private final String kafkaServers = "kafka:9092";
-	private final String inputTopicName = "ipoint.public.entity_field_value";
-	private final String consumerGroupId = "entity_group";
-	private final String outputTopicName = "windowing_output";
 
-	public StreamingJob(SourceFunction<Long> source, SinkFunction<Long> sink) {
-		this.source = source;
-		this.sink = sink;
-	}
+	private static Properties properties = new Properties();
+	private static String inputTopicName;
+	private static String consumerGroupId;
+	private static String outputTopicNames;
+	private static String kafkaServers;
 
 	public StreamingJob() {
+		super();
+		properties = getProperties();
+		inputTopicName = properties.getProperty("inputTopicName");
+		consumerGroupId = properties.getProperty("consumerGroupId");
+		outputTopicNames = properties.getProperty("outputTopicNames");
+		kafkaServers = properties.getProperty("kafkaServers");
+	}
+
+	private Properties getProperties() {
+		Properties properties = new Properties();
+		URL url = StreamingJob.class.getClassLoader().getResource("application.properties");
+		try {
+			if (url != null) {
+				properties.load(url.openStream());
+			}
+		} catch (FileNotFoundException fie) {
+			System.out.println("File Not Found");
+			fie.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		System.out.println(properties.getProperty("flink.version"));
+		Set<String> keys = properties.stringPropertyNames();
+		for (String key : keys) {
+			System.out.println(key + " - " + properties.getProperty(key));
+		}
+		return properties;
+	}
+
+	private KafkaSource<KafkaMessage> getKafkaMessageSource(String kafkaServers, String topicName, String groupId) {
+		return KafkaSource.<KafkaMessage>builder().setBootstrapServers(kafkaServers).setTopics(topicName)
+				.setGroupId(groupId).setStartingOffsets(OffsetsInitializer.latest())
+				.setValueOnlyDeserializer(new KafkaMessageSchema()).build();
+	}
+
+	private KafkaSink<GroupedData> getOutputSink(String kafkaServers, String topicName) {
+		return KafkaSink.<GroupedData>builder().setBootstrapServers(kafkaServers)
+				.setRecordSerializer(new KafkaMessageSinkSchema(topicName))
+				.setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE).build();
 	}
 
 	public void execute() throws Exception {
 		Configuration conf = new Configuration();
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
+		env.enableCheckpointing(5000); // Checkpoint every 5 seconds
+		env.getCheckpointConfig().setCheckpointTimeout(60000);
 
-		KafkaSource<KafkaMessage> kafkaSource = KafkaSource.<KafkaMessage>builder().setBootstrapServers(kafkaServers)
-				.setTopics(inputTopicName).setGroupId(consumerGroupId)
-				.setStartingOffsets(OffsetsInitializer.latest())
-				.setValueOnlyDeserializer(new KafkaMessageSchema())
-				.build();
+		KafkaSource<KafkaMessage> kafkaSource = getKafkaMessageSource(kafkaServers, inputTopicName, consumerGroupId);
 
-		DataStream<KafkaMessage> stream = env
-				.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "Kafka Consumer Source").setParallelism(1);
+		// forBoundedOutOfOrderness below works based on kafka processed/ingestion time
+		// not the eventtime. So need to have a separate watermark strategy if you need
+		// to process based on event time
+		DataStream<KafkaMessage> stream = env.fromSource(kafkaSource,
+				WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofMinutes(1)), "Kafka Consumer Source")
+				.setParallelism(1);
 
 		// Print the results to the TaskManager logs
 		stream.map(message -> {
@@ -79,10 +121,9 @@ public class StreamingJob {
 		};
 
 		WatermarkStrategy<KafkaMessage> watermarkStrategy = WatermarkStrategy
-				.<KafkaMessage>forBoundedOutOfOrderness(Duration.ofMillis(100)).withTimestampAssigner(sz)
+				.<KafkaMessage>forBoundedOutOfOrderness(Duration.ofMillis(1000)).withTimestampAssigner(sz)
 				.withIdleness(Duration.ofSeconds(10));
 
-//		DataStream<KafkaMessage> watermarkDataStream = stream.assignTimestampsAndWatermarks(watermarkStrategy);
 		DataStream<GroupedData> groupedData = stream.assignTimestampsAndWatermarks(watermarkStrategy)
 				.keyBy((KeySelector<KafkaMessage, String>) kafkaMessage -> {
 					Integer recordId = kafkaMessage.after != null ? Integer.valueOf(kafkaMessage.after.record_id)
@@ -95,11 +136,9 @@ public class StreamingJob {
 				}).window(TumblingProcessingTimeWindows.of(Time.seconds(1)))
 				.apply(new GroupByRecordIdAndOrganizationIdProcessFunction());
 
-		KafkaSink<GroupedData> sink = KafkaSink.<GroupedData>builder().setBootstrapServers(kafkaServers)
-				.setRecordSerializer(new KafkaMessageSinkSchema(outputTopicName))
-				.setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE).build();
-
+		KafkaSink<GroupedData> sink = getOutputSink(kafkaServers, outputTopicNames);
 		groupedData.sinkTo(sink);
+		env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, 1000));
 		env.execute("Kafka Windowing Job");
 	}
 

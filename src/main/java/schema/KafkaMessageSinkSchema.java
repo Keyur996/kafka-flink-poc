@@ -9,7 +9,6 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.Serializa
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.json.JsonMapper;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
-
 import models.GroupedData;
 
 public class KafkaMessageSinkSchema implements KafkaRecordSerializationSchema<GroupedData> {

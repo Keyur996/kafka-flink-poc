@@ -1,13 +1,14 @@
 package operator;
 
-import models.GroupedData;
-import models.KafkaMessage;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 
-import java.util.ArrayList;
-import java.util.List;
+import models.GroupedData;
+import models.KafkaMessage;
 
 public class GroupByRecordIdAndOrganizationIdProcessFunction implements WindowFunction<KafkaMessage, GroupedData, String, TimeWindow> {
 
